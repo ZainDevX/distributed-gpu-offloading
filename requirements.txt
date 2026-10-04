@@ -1,0 +1,7 @@
+# Distributed GPU Offloading System Requirements
+customtkinter>=6.0.0
+imageio-ffmpeg>=0.5.1
+psutil>=5.9.0
+pillow>=10.0.0
+packaging>=23.0
+darkdetect>=0.8.0
