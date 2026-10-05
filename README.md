@@ -109,6 +109,23 @@ The project follows an asynchronous Client-Server Master-Worker architecture ope
 
 ```
 distributed-gpu-offloading/
+├── START_CLIENT.bat            # 1-Click root launcher for Client
+├── START_HOST.bat              # 1-Click root launcher for Host
+├── client run/                 # Standalone, portable Client distribution package
+│   ├── START_CLIENT.bat        # 1-Click Client Launcher (auto-installs packages & launches GUI)
+│   ├── run_client.py           # Auto-bootstrap, smart network selection & workflow instructions
+│   ├── client/                 # Client GUI & network stack
+│   ├── common/                 # Protocol framing & shared utilities
+│   ├── scripts/                # Synthetic video generator & static IP helpers
+│   └── requirements.txt        # Client Python dependencies
+├── host run/                   # Standalone, portable Host distribution package
+│   ├── START_HOST.bat          # 1-Click Host Launcher (hardware probe, daemon & GUI)
+│   ├── run_host.py             # Auto-bootstrap, GPU probe, network priority & daemon launcher
+│   ├── server/                 # GPU execution daemon & Task Queue manager
+│   ├── client/                 # Client GUI components (allows local monitoring on Host)
+│   ├── common/                 # Protocol framing & shared utilities
+│   ├── scripts/                # Helper scripts & static IP configuration
+│   └── requirements.txt        # Host Python dependencies
 ├── client/                     # Task 3 & 4: Client GUI & Network Stack
 │   ├── __init__.py
 │   ├── client_network.py       # Framed socket client, handshake, latency ping, streaming
@@ -135,18 +152,9 @@ distributed-gpu-offloading/
 │   ├── setup_static_ip.bat     # Windows automated static IP helper script
 │   └── setup_static_ip.sh      # Linux static IP network configuration script
 ├── docs/                       # Formal Documentation, Academic Reports & Screenshots
-│   ├── screenshots/            # Visual demonstration screenshots
-│   │   ├── server_daemon.png   # Daemon startup, GPU detection & queue
-│   │   ├── gui_handshake.png   # Client handshake, latency ping & telemetry
-│   │   ├── gui_progress.png    # Live GPU offload, progress bar & terminal
-│   │   ├── gui_results_speedup.png # Speedup comparison card & SHA-256 match
-│   │   └── benchmark_table.png # Multi-resolution benchmark results table
-│   ├── PERFORMANCE_REPORT.md   # Formal academic evaluation report (Task 5)
-│   ├── NETWORK_SETUP.md        # Comprehensive peer-to-peer static IP setup guide
-│   └── ARCHITECTURE.md         # Deep-dive system architecture & protocol specifications
 ├── requirements.txt            # Python dependencies
-├── start_server.py             # Convenience server daemon launcher
-├── start_client.py             # Convenience client GUI launcher
+├── start_server.py             # Standard server daemon launcher
+├── start_client.py             # Standard client GUI launcher
 └── test_integration.py        # Automated end-to-end integration test
 ```
 
@@ -214,9 +222,35 @@ On **Client Laptop**:
 
 ---
 
-## 6. Execution Guide (Starting Daemon & Launching GUI)
+## 6. Execution Guide (1-Click Launchers & Manual Commands)
 
-### Step 1: Start the Remote Worker Daemon (Server)
+### Method A: One-Click Launchers (Recommended — Auto-Bootstrap & Smart Network Detection)
+
+The project includes ready-made, self-healing launchers with **automatic dependency installation**, **smart network interface selection** (prioritizes CAT6 Ethernet if plugged in; automatically falls back to Wi-Fi if unplugged), **pre-filled connection IPs**, and **vibrant ANSI terminal diagnostics**:
+
+#### 1. On Your Host PC (Worker Node with GPU):
+Simply double-click:
+👉 `START_HOST.bat` *(inside `host run/` or root directory)*
+* Automatically validates Python 3.9+ and auto-installs missing dependencies.
+* Probes NVIDIA GPU telemetry (GeForce GTX 1050 4GB, Driver, CUDA, Hardware MFT/NVENC).
+* Intelligently selects the best network adapter (prioritizing 1 Gbps CAT6 Ethernet).
+* Prominently displays the IP address you need to give to the Client.
+* Launches the Worker Server Daemon in the background listening on port `5050` (handles port-in-use gracefully).
+* Opens the Desktop GUI Dashboard on your screen for local monitoring and testing.
+
+#### 2. On the Client Laptop:
+Copy the `client run/` folder to the client machine and double-click:
+👉 `START_CLIENT.bat` *(inside `client run/`)*
+* Automatically inspects dependencies; if running on a fresh PC with no packages, it **auto-installs them via pip** with live progress!
+* Detects network mode (Ethernet CAT6 vs Wi-Fi) and prints clear step-by-step instructions in the terminal.
+* Pre-fills the Host's IP into the GUI automatically.
+* Opens the Desktop GUI Dashboard ready for connection!
+
+---
+
+### Method B: Standard Command-Line Execution
+
+#### Step 1: Start the Remote Worker Daemon (Server)
 Run this command on the workstation equipped with the dedicated GPU:
 ```powershell
 python start_server.py --port 5050
@@ -231,15 +265,17 @@ The daemon will display its banner, probe the NVIDIA GPU via `nvidia-smi`, repor
 
 ---
 
-### Step 2: Launch the Client Desktop GUI (Client Laptop)
+#### Step 2: Launch the Client Desktop GUI (Client Laptop)
 On the resource-constrained client machine, launch the dashboard:
 ```powershell
 python start_client.py
 ```
 
+---
+
 ### Step 3: Using the GUI Dashboard:
 1. **Network Handshake**:
-   - Enter the Worker IP (e.g., `192.168.1.1` or `127.0.0.1` for local testing) and port `5050`.
+   - Verify Worker IP (e.g., `192.168.1.2` or `127.0.0.1` for local testing) and port `5050`.
    - Click **🔗 Handshake & Ping Check**.
    - The status badge will turn green and display round-trip latency (e.g. `0.65 ms`) along with remote GPU telemetry (`GeForce GTX 1050 4GB`).
 2. **Select or Generate Media**:
