@@ -16,6 +16,7 @@ client_outputs/
 server_workspace/
 **/client_outputs/
 **/server_workspace/
+**/temp_render/
 
 # Generated video media files (exclude all rendered and synthetic test videos)
 test_media/*.mp4

@@ -111,6 +111,14 @@ The project follows an asynchronous Client-Server Master-Worker architecture ope
 distributed-gpu-offloading/
 ├── START_CLIENT.bat            # 1-Click root launcher for Client
 ├── START_HOST.bat              # 1-Click root launcher for Host
+├── START_EDITOR.bat            # 1-Click root launcher for Clipchamp Video Editor Studio
+├── start_editor.py             # Clipchamp Studio desktop video editor launcher
+├── clipchamp_studio/           # Microsoft Windows 11 Clipchamp Video Editor Studio Module
+│   ├── model/                  # Project schema, VideoClip, AudioClip, TextOverlay, Filters, Clipchamp parser
+│   ├── engine/                 # Timeline chunker, FFmpeg complex filter builder, Local CPU executor
+│   ├── network/                # Asset sync, selective deduplication & chunked offloading client
+│   ├── ui/                     # Multi-track timeline, Canvas preview monitor, Clip inspector, Export dialog
+│   └── tests/                  # Unit and end-to-end chunked offloading integration tests
 ├── client run/                 # Standalone, portable Client distribution package
 │   ├── START_CLIENT.bat        # 1-Click Client Launcher (auto-installs packages & launches GUI)
 │   ├── run_client.py           # Auto-bootstrap, smart network selection & workflow instructions
@@ -346,4 +354,79 @@ Expected output:
        [Progress] Remote GPU Transcoding: 100.0% | Speed: 16x
        [Progress] Downloading Rendered Output: 100.0% (96.62 MB/s)
 INTEGRATION TEST PASSED! SHA-256 Verified: True
+```
+
+---
+
+## 10. 🎬 Microsoft Windows 11 Clipchamp Video Editor Studio & Chunked GPU Offload
+
+### Overview
+The **Clipchamp Studio** module brings a complete desktop Non-Linear Video Editor (NLE) modeled directly after Microsoft Windows 11 Clipchamp, integrated with the Distributed GPU Offloading architecture.
+
+```
++--------------------------------------------------------------------------------------------------+
+|                            CLIENT: CLIPCHAMP STUDIO VIDEO EDITOR                                 |
+|  [Media Pool] ---> [Interactive Multi-Track Timeline] ---> [Live Preview Canvas Player]          |
+|  (Videos/Audios)   (Video V1, Titles T1, Audio A1)         (Playhead Scrub, Aspect Ratios)       |
++--------------------------------------------------------------------------------------------------+
+                                                 |
+                                                 v
++--------------------------------------------------------------------------------------------------+
+|                     TEMPORAL CHUNKING & ASSET DEDUPLICATION ENGINE                                |
+|  • Partition Timeline into N Temporal Chunks: [0-6s], [6-12s], [12-18s]...                       |
+|  • Query Host Asset Cache (Deduplication): Only missing raw media files are transmitted!          |
++--------------------------------------------------------------------------------------------------+
+                                                 |
+                                                 | Framed Binary Protocol (DGPO TCP)
+                                                 v
++--------------------------------------------------------------------------------------------------+
+|                          REMOTE WORKER NODE (HOST GPU ACCELERATION)                              |
+|  • Parallel / Pipelined GPU Transcoding: FFmpeg NVENC (h264_nvenc) / Hardware MFT (h264_mf)     |
+|  • Sub-Second Lossless Assembly: Concat demuxer joins rendered chunks with keyframe alignment    |
++--------------------------------------------------------------------------------------------------+
+                                                 |
+                                                 | Streaming Master Output + SHA-256 Checksum
+                                                 v
++--------------------------------------------------------------------------------------------------+
+|                                  CLIENT MASTER EXPORT RECEIVED                                   |
+|  • Real-Time Multi-Chunk Progress Cards (Chunk 1: 100%, Chunk 2: 75% GPU, Chunk 3: Queued)      |
+|  • Side-by-Side Amdahl's Law Speedup Evaluation vs Local CPU Baseline Render                     |
++--------------------------------------------------------------------------------------------------+
+```
+
+### Key Editing Features
+- **Interactive Multi-Track Timeline**:
+  - **Video Track (V1)**: Clips represented as colored blocks with name, duration, filter tags, and speed tags.
+  - **Text Overlay Track (T1)**: Title and subtitle banner blocks positioned along the timeline.
+  - **Audio Track (A1)**: Background music and voiceover clips.
+  - **Playhead Needle**: Movable vertical cursor across all tracks with live timecode display.
+- **Editing Tools**:
+  - **Razor Split Tool (`S`)**: Splits the selected clip right at the current playhead position.
+  - **Trimming Controls**: Adjust in-point (`Trim Start`) and out-point (`Trim End`).
+  - **Playback Speed Controller**: `0.25x` (slow-mo), `0.5x`, `1.0x` (normal), `1.5x`, `2.0x`, `4.0x` (hyperlapse).
+  - **Aesthetic Filter Presets**: `Normal`, `Vivid`, `Warm Cinematic`, `Cool Cyberpunk`, `Noir B&W`, `Vintage Sepia`, `Vignette Drama`, `High Contrast`, `Letterbox 2.35:1`.
+  - **Transformations**: Rotate 90° clockwise, Horizontal mirror flip.
+  - **Volume Boost**: Audio gain from 0% (mute) to 200% boost.
+  - **Text Styling**: Custom title strings, font size, colors (White, Yellow, Cyan, Gold, Neon), screen positions (Center, Top Banner, Bottom Subtitle, Lower Third), and semi-transparent background boxes.
+- **Windows 11 Clipchamp Compatibility**:
+  - Automatic detection and scanning of Microsoft Clipchamp app data in `%LOCALAPPDATA%\Packages\Clipchamp.Clipchamp_...`.
+  - Save and load `.clipchamp.json` project composition files.
+
+### Why Temporal Chunking?
+1. **Parallel GPU Encoding**: Modern GPUs feature dedicated multi-stream hardware encoding engines (NVENC / MFT). Splitting a 1080p/4K timeline into chunks allows the Host to encode segments concurrently.
+2. **Chunk-Level Fault Tolerance & Reliability**: If any network disruption occurs, only the specific failed chunk needs re-rendering rather than restarting an entire project render from scratch.
+3. **Asset Deduplication**: Media files are hashed with SHA-256. If a clip was uploaded previously, subsequent exports reuse the cached asset on the host with **0.00s network overhead**.
+4. **Lossless Sub-Second Stitching**: Each chunk is rendered with strictly enforced closed GOP keyframe intervals (`-g FPS`). The Host stitches all chunks via FFmpeg concat demuxer in milliseconds without re-encoding.
+
+### Launching Clipchamp Studio
+```powershell
+# Option 1: Direct 1-Click Batch File
+.\START_EDITOR.bat
+
+# Option 2: Python Command
+python start_editor.py --host 127.0.0.1 --port 5050
+
+# Option 3: From Client Dashboard GUI
+python start_client.py
+# (Click "🎬 Clipchamp Video Editor Studio" in the top header)
 ```

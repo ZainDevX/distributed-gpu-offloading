@@ -26,7 +26,11 @@ from common.config import (
 )
 from common.protocol import (
     ConnectionClosedError,
+    MSG_ASSET_CHECK_REQ,
+    MSG_ASSET_CHECK_RESP,
+    MSG_ASSET_UPLOAD_START,
     MSG_CANCEL,
+    MSG_CHUNK_PROGRESS,
     MSG_DOWNLOAD_REQ,
     MSG_DOWNLOAD_START,
     MSG_ERROR,
@@ -41,6 +45,7 @@ from common.protocol import (
     MSG_PING,
     MSG_PONG,
     MSG_PROGRESS,
+    MSG_PROJECT_SUBMIT,
     ProtocolError,
     recv_json,
     recv_packet,
@@ -48,6 +53,7 @@ from common.protocol import (
     send_packet,
 )
 from common.utils import calculate_sha256, format_bytes, get_all_interfaces, get_local_ip
+from server.chunked_engine import ChunkedProjectEngine
 from server.execution_engine import ExecutionEngine
 from server.gpu_detector import GPUDetector
 from server.task_queue import JobRecord, JobStatus, TaskQueueManager
@@ -77,8 +83,11 @@ class WorkerDaemon:
         self.workdir = Path(workdir)
         self.workdir.mkdir(parents=True, exist_ok=True)
         self.allow_cpu_fallback = allow_cpu_fallback
+        self.asset_cache_dir = self.workdir / "asset_cache"
+        self.asset_cache_dir.mkdir(parents=True, exist_ok=True)
         self.task_queue = TaskQueueManager(max_concurrent=max_concurrent)
         self.execution_engine = ExecutionEngine(allow_cpu_fallback=allow_cpu_fallback)
+        self.chunked_engine = ChunkedProjectEngine(allow_cpu_fallback=allow_cpu_fallback)
 
         self.server_socket: Optional[socket.socket] = None
         self.is_running = False
@@ -202,6 +211,96 @@ class WorkerDaemon:
                     }
                     send_json(client_sock, MSG_HANDSHAKE_RESP, response)
                     logger.info(f"[+] Handshake completed for {addr_str} (GPU: {caps['gpu_name']})")
+
+                # 2b. Asset Check Request (Deduplication Check)
+                elif msg_type == MSG_ASSET_CHECK_REQ:
+                    import json
+                    req_data = json.loads(payload.decode("utf-8")) if payload else {}
+                    assets = req_data.get("assets", [])
+                    existing_hashes = []
+                    missing_hashes = []
+
+                    for a in assets:
+                        sha = a.get("sha256", "")
+                        fname = a.get("filename", "")
+                        size = int(a.get("size_bytes", 0))
+
+                        # Look for cached file
+                        cached_file = self.asset_cache_dir / f"{sha}_{fname}"
+                        alt_file = self.asset_cache_dir / fname
+                        if cached_file.exists() and (size == 0 or os.path.getsize(cached_file) == size):
+                            existing_hashes.append(sha)
+                        elif alt_file.exists() and (size == 0 or os.path.getsize(alt_file) == size):
+                            existing_hashes.append(sha)
+                        else:
+                            missing_hashes.append(sha)
+
+                    logger.info(f"[ASSET] Check: {len(existing_hashes)} cached, {len(missing_hashes)} need upload.")
+                    send_json(client_sock, MSG_ASSET_CHECK_RESP, {
+                        "existing": existing_hashes,
+                        "missing": missing_hashes,
+                    })
+
+                # 2c. Dedicated Asset Upload
+                elif msg_type == MSG_ASSET_UPLOAD_START:
+                    import hashlib, json
+                    asset_info = json.loads(payload.decode("utf-8")) if payload else {}
+                    fname = os.path.basename(asset_info.get("filename", "asset.dat"))
+                    fsize = int(asset_info.get("filesize", 0))
+                    expected_sha = asset_info.get("sha256", "")
+
+                    target_file = self.asset_cache_dir / f"{expected_sha}_{fname}"
+                    logger.info(f"[ASSET] Receiving asset upload '{fname}' ({format_bytes(fsize)})...")
+
+                    send_json(client_sock, MSG_JOB_ACCEPTED, {"message": "Ready to receive asset chunk."})
+
+                    hasher = hashlib.sha256()
+                    recv_bytes = 0
+                    with open(target_file, "wb") as f:
+                        while recv_bytes < fsize:
+                            m_type, _, chunk = recv_packet(client_sock)
+                            if m_type == MSG_FILE_CHUNK:
+                                f.write(chunk)
+                                hasher.update(chunk)
+                                recv_bytes += len(chunk)
+                            elif m_type == MSG_FILE_COMPLETE:
+                                break
+
+                    # Consume trailing complete if needed
+                    if m_type != MSG_FILE_COMPLETE and recv_bytes >= fsize:
+                        m_type, _, _ = recv_packet(client_sock)
+
+                    computed_sha = hasher.hexdigest()
+                    if expected_sha and computed_sha.lower() != expected_sha.lower():
+                        logger.error(f"[ASSET] SHA-256 mismatch for asset {fname}!")
+                        if target_file.exists():
+                            target_file.unlink()
+                        send_json(client_sock, MSG_FILE_ACK, {"status": "error", "error": "Checksum mismatch"})
+                    else:
+                        logger.info(f"[ASSET] Cached asset verified: {fname} (SHA: {computed_sha[:10]}...)")
+                        send_json(client_sock, MSG_FILE_ACK, {"status": "ok", "sha256": computed_sha})
+
+                # 2d. Clipchamp Project Submission (Chunked GPU Offloading)
+                elif msg_type == MSG_PROJECT_SUBMIT:
+                    import json
+                    project_spec = json.loads(payload.decode("utf-8"))
+                    proj_name = project_spec.get("project_name", "Clipchamp_Project")
+
+                    logger.info(f"[PROJECT] Received Clipchamp project submit: '{proj_name}'")
+                    current_job = self.task_queue.create_job(
+                        client_addr=addr_str,
+                        config={"type": "clipchamp_project", "project": project_spec},
+                        input_filename=f"{proj_name}.clipchamp",
+                        input_filesize=len(payload),
+                        input_sha256="",
+                    )
+                    send_json(client_sock, MSG_JOB_ACCEPTED, {
+                        "job_id": current_job.job_id,
+                        "message": "Clipchamp project accepted. Commencing chunked GPU render.",
+                    })
+
+                    # Run chunked execution on GPU with real-time socket progress streaming
+                    self._run_chunked_project_and_stream(client_sock, current_job, project_spec)
 
                 # 3. Job Submission
                 elif msg_type == MSG_JOB_SUBMIT:
@@ -396,6 +495,65 @@ class WorkerDaemon:
                 })
         except Exception as e:
             logger.error(f"[ENGINE] Execution error on job {job.job_id}: {e}")
+            self.task_queue.release_job(job.job_id, success=False, error=str(e))
+            with sock_lock:
+                send_json(client_sock, MSG_ERROR, {
+                    "job_id": job.job_id,
+                    "error": str(e),
+                })
+
+    def _run_chunked_project_and_stream(
+        self, client_sock: socket.socket, job: JobRecord, project_data: Dict[str, Any]
+    ) -> None:
+        """Execute chunked Clipchamp project render on Host GPU and stream progress."""
+        sock_lock = threading.Lock()
+
+        def on_progress(stats: Dict[str, Any]) -> None:
+            self.task_queue.update_progress(job.job_id, stats)
+            with sock_lock:
+                try:
+                    send_json(client_sock, MSG_CHUNK_PROGRESS, stats)
+                except Exception:
+                    pass
+
+        def on_log(msg: str) -> None:
+            with sock_lock:
+                try:
+                    send_json(client_sock, MSG_PROGRESS, {"stage": "Log", "log_line": msg})
+                except Exception:
+                    pass
+
+        try:
+            res = self.chunked_engine.execute_project(
+                project_data=project_data,
+                asset_cache_dir=self.asset_cache_dir,
+                output_dir=self.workdir,
+                job_id=job.job_id,
+                progress_callback=on_progress,
+                log_callback=on_log,
+                cancel_check=lambda: job.cancel_requested,
+            )
+            out_p = Path(res["output_path"])
+            job.output_path = out_p
+            job.output_filename = res["output_filename"]
+            job.output_filesize = res["output_filesize"]
+            job.output_sha256 = res["output_sha256"]
+            self.task_queue.release_job(job.job_id, success=True)
+
+            with sock_lock:
+                send_json(client_sock, MSG_JOB_FINISHED, {
+                    "job_id": job.job_id,
+                    "status": "success",
+                    "execution_time_seconds": res["execution_time_seconds"],
+                    "output_filename": res["output_filename"],
+                    "output_filesize": res["output_filesize"],
+                    "output_sha256": res["output_sha256"],
+                    "chunks_rendered": res.get("chunks_rendered", 1),
+                    "encoder_used": res.get("encoder_used", "Unknown"),
+                    "gpu_name": res.get("gpu_name", "Host GPU"),
+                })
+        except Exception as e:
+            logger.error(f"[CHUNK-ENGINE] Execution error on job {job.job_id}: {e}", exc_info=True)
             self.task_queue.release_job(job.job_id, success=False, error=str(e))
             with sock_lock:
                 send_json(client_sock, MSG_ERROR, {

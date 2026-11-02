@@ -107,6 +107,18 @@ class DistributedOffloadGUI(ctk.CTk):
         )
         self.badge_status.pack(side="right", padx=16, pady=10)
 
+        # Clipchamp Video Editor Studio Launcher Button
+        self.btn_open_clipchamp = ctk.CTkButton(
+            self.header_frame,
+            text="🎬 Clipchamp Video Editor Studio",
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            fg_color="#6366f1",
+            hover_color="#4f46e5",
+            height=30,
+            command=self._launch_clipchamp_studio,
+        )
+        self.btn_open_clipchamp.pack(side="right", padx=(0, 10), pady=10)
+
         # Main scrollable body container
         self.main_container = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self.main_container.pack(fill="both", expand=True, padx=12, pady=4)
@@ -880,6 +892,14 @@ class DistributedOffloadGUI(ctk.CTk):
         folder = CLIENT_OUTPUT_DIR
         if os.path.exists(folder):
             os.startfile(folder)
+
+    def _launch_clipchamp_studio(self):
+        """Open the Windows 11 Clipchamp Video Editor Studio."""
+        from clipchamp_studio.ui.editor_window import ClipchampEditorWindow
+        target_ip = self.entry_ip.get().strip() or DEFAULT_CLIENT_TARGET
+        target_port = int(self.entry_port.get().strip() or DEFAULT_PORT)
+        editor = ClipchampEditorWindow(target_host=target_ip, target_port=target_port)
+        editor.mainloop()
 
 
 def main(target_ip: Optional[str] = None):
