@@ -104,6 +104,17 @@ class ClipchampEditorWindow(ctk.CTk):
         )
         self.btn_scan_win11.pack(side="left", padx=6)
 
+        self.btn_open_transcoder = ctk.CTkButton(
+            self.top_bar,
+            text="⚡ Transcoder Hub",
+            width=135,
+            height=28,
+            fg_color="#0284c7",
+            hover_color="#0369a1",
+            command=self._on_open_transcoder,
+        )
+        self.btn_open_transcoder.pack(side="left", padx=6)
+
         # Host Worker Connection Badge & Config
         self.host_entry = ctk.CTkEntry(
             self.top_bar,
@@ -255,6 +266,12 @@ class ClipchampEditorWindow(ctk.CTk):
             messagebox.showinfo("Windows 11 Clipchamp Status", msg)
         else:
             messagebox.showinfo("Clipchamp Status", "Clipchamp package not detected in default UWP directory.")
+
+    def _on_open_transcoder(self):
+        from client.gui_app import DistributedOffloadGUI
+        target_ip = self.host_entry.get().strip() or self.target_host
+        app = DistributedOffloadGUI(target_ip=target_ip)
+        app.mainloop()
 
     def _open_export_dialog(self):
         """Launch the Host GPU chunked export dialog."""

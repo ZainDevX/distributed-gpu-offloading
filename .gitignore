@@ -18,6 +18,13 @@ server_workspace/
 **/server_workspace/
 **/temp_render/
 
+# Standalone Executables, PyInstaller Builds & Binary Distribution Packages
+build/
+dist/
+*.spec
+Client_Package/
+Host_Package/
+
 # Generated video media files (exclude all rendered and synthetic test videos)
 test_media/*.mp4
 test_media/*.mkv
