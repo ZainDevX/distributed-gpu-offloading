@@ -4,6 +4,8 @@ Complete desktop editing environment with multi-track timeline, real-time previe
 media asset drawer, property inspector, and Host GPU chunked export.
 """
 
+import subprocess
+import sys
 from pathlib import Path
 from tkinter import filedialog, messagebox
 from typing import Optional
@@ -44,6 +46,16 @@ class ClipchampEditorWindow(ctk.CTk):
 
         self._build_ui()
         self._load_initial_samples_if_available()
+        self.protocol("WM_DELETE_WINDOW", self._on_window_close)
+
+    def _on_window_close(self):
+        """Cleanly terminate playback loops before window destruction."""
+        try:
+            if hasattr(self, "preview_monitor") and self.preview_monitor.is_playing:
+                self.preview_monitor.is_playing = False
+        except Exception:
+            pass
+        self.destroy()
 
     def _build_ui(self):
         # 1. Top Titlebar / Command Strip
@@ -268,10 +280,14 @@ class ClipchampEditorWindow(ctk.CTk):
             messagebox.showinfo("Clipchamp Status", "Clipchamp package not detected in default UWP directory.")
 
     def _on_open_transcoder(self):
-        from client.gui_app import DistributedOffloadGUI
+        """Open the Single-Video Transcoder Hub in an isolated process to avoid Tkinter root conflicts."""
         target_ip = self.host_entry.get().strip() or self.target_host
-        app = DistributedOffloadGUI(target_ip=target_ip)
-        app.mainloop()
+        if getattr(sys, "frozen", False):
+            subprocess.Popen([sys.executable, "--transcoder", "--ip", target_ip])
+        else:
+            base_dir = Path(__file__).resolve().parent.parent.parent
+            script = base_dir / "start_client.py"
+            subprocess.Popen([sys.executable, str(script), "--ip", target_ip])
 
     def _open_export_dialog(self):
         """Launch the Host GPU chunked export dialog."""

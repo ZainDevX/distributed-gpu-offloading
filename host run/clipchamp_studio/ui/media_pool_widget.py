@@ -222,3 +222,4 @@ class MediaPoolWidget(ctk.CTkFrame):
             self.project.add_audio_clip_from_file(p)
         if self.on_clip_added:
             self.on_clip_added()
+

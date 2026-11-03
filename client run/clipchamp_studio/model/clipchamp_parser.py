@@ -77,3 +77,4 @@ def import_clipchamp_project(file_path: Path) -> ClipchampProject:
         project_name=data.get("title", data.get("name", file_path.stem)),
     )
     return proj
+

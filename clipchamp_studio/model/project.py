@@ -185,7 +185,9 @@ class ClipchampProject:
         assets: Dict[str, Dict[str, Any]] = {}
         for clip in self.video_clips:
             p = Path(clip.source_path)
-            if p.exists() and clip.asset_id:
+            if p.exists():
+                if not clip.asset_id:
+                    clip.asset_id = calculate_sha256(p)
                 if clip.asset_id not in assets:
                     assets[clip.asset_id] = {
                         "asset_id": clip.asset_id,
@@ -197,7 +199,9 @@ class ClipchampProject:
                     }
         for aud in self.audio_clips:
             p = Path(aud.source_path)
-            if p.exists() and aud.asset_id:
+            if p.exists():
+                if not aud.asset_id:
+                    aud.asset_id = calculate_sha256(p)
                 if aud.asset_id not in assets:
                     assets[aud.asset_id] = {
                         "asset_id": aud.asset_id,

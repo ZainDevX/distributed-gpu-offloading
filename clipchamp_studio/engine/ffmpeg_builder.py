@@ -156,10 +156,22 @@ class FFmpegBuilder:
                 box_color=ts.box_color,
                 box_borderw=ts.box_borderw,
             )
-            draw_filter = temp_overlay.build_drawtext_filter(
-                local_start_time=ts.local_start,
-                local_end_time=ts.local_end,
-            )
+            # Write text content to dedicated UTF-8 text file to eliminate filter escaping conflicts
+            txt_file = output_file.parent / f"text_{chunk.chunk_index}_{idx}.txt"
+            try:
+                output_file.parent.mkdir(parents=True, exist_ok=True)
+                txt_file.write_text(ts.text, encoding="utf-8")
+                draw_filter = temp_overlay.build_drawtext_filter(
+                    local_start_time=ts.local_start,
+                    local_end_time=ts.local_end,
+                    text_file=txt_file,
+                )
+            except Exception:
+                # Fallback to sanitized inline drawtext filter
+                draw_filter = temp_overlay.build_drawtext_filter(
+                    local_start_time=ts.local_start,
+                    local_end_time=ts.local_end,
+                )
             next_v_tag = f"v_txt_{idx}"
             filter_chains.append(f"[{cur_v_tag}]{draw_filter}[{next_v_tag}]")
             cur_v_tag = next_v_tag
@@ -267,13 +279,19 @@ class FFmpegBuilder:
     def build_concat_manifest(self, chunk_files: List[Path], manifest_path: Path) -> Path:
         """
         Generate FFmpeg concat demuxer manifest text file.
-        Each line: file '/absolute/path/to/chunk.mp4'
+        Uses relative paths from manifest to chunk files to ensure paths with spaces,
+        quotes, or special characters in parent directories do not break FFmpeg demuxing.
         """
         manifest_path = Path(manifest_path)
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
         with open(manifest_path, "w", encoding="utf-8") as f:
             for c in chunk_files:
-                escaped = str(c.resolve()).replace("\\", "/")
+                try:
+                    rel_p = os.path.relpath(c.resolve(), manifest_path.parent.resolve()).replace("\\", "/")
+                except Exception:
+                    rel_p = str(c.resolve()).replace("\\", "/")
+                # Escape any single quotes in the filename
+                escaped = rel_p.replace("'", r"\'")
                 f.write(f"file '{escaped}'\n")
         return manifest_path
 

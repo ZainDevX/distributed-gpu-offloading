@@ -71,6 +71,22 @@ def build():
     # Copy ffmpeg
     shutil.copy2(ffmpeg_exe, host_pkg / "ffmpeg.exe")
     (host_pkg / "server_workspace" / "asset_cache").mkdir(parents=True, exist_ok=True)
+    
+    # Create Host launcher and instructions
+    (host_pkg / "START_HOST.bat").write_text(
+        "@echo off\r\ntitle Host GPU Server\r\ncd /d \"%~dp0\"\r\nstart Host_GPU_Server.exe\r\n",
+        encoding="utf-8"
+    )
+    (host_pkg / "QUICKSTART_GUIDE.txt").write_text(
+        "=== HOST GPU SERVER NODE (CSC-334) ===\n\n"
+        "HOW TO RUN ON A FRESH PC:\n"
+        "1. Double-click START_HOST.bat (or run Host_GPU_Server.exe).\n"
+        "2. The server dashboard will open and auto-detect your GPU (NVIDIA GTX/RTX or Intel/AMD).\n"
+        "3. Click 'Copy IP' in the top-right corner.\n"
+        "4. Give that IP to the client so they can connect and offload video exports.\n\n"
+        "No Python, no Git, and no external FFmpeg installation is required.\n",
+        encoding="utf-8"
+    )
 
     # 6. Populate Client_Package
     print("[*] Assembling Client_Package distribution...")
@@ -86,12 +102,34 @@ def build():
     if (BASE_DIR / "test_media" / "test_clip_480p.mp4").exists():
         shutil.copy2(BASE_DIR / "test_media" / "test_clip_480p.mp4", sample_dir / "sample_clip.mp4")
 
+    # Create Client launchers and instructions
+    (client_pkg / "START_CLIENT.bat").write_text(
+        "@echo off\r\ntitle Clipchamp Studio Video Editor\r\ncd /d \"%~dp0\"\r\nstart Clipchamp_GPU_Client.exe\r\n",
+        encoding="utf-8"
+    )
+    (client_pkg / "START_TRANSCODER.bat").write_text(
+        "@echo off\r\ntitle Single Video Transcoder Hub\r\ncd /d \"%~dp0\"\r\nstart Clipchamp_GPU_Client.exe --transcoder\r\n",
+        encoding="utf-8"
+    )
+    (client_pkg / "QUICKSTART_GUIDE.txt").write_text(
+        "=== CLIPCHAMP GPU CLIENT STUDIO (CSC-334) ===\n\n"
+        "HOW TO RUN ON A FRESH PC:\n"
+        "1. Double-click START_CLIENT.bat to open the Clipchamp Studio Video Editor.\n"
+        "2. In the top bar, enter the Host IP address provided by the Host PC.\n"
+        "3. Edit your video (cuts, text overlays, aesthetic filters, audio mixing).\n"
+        "4. Click 'Export with Host GPU' to offload chunked video rendering to the Host GPU!\n\n"
+        "To transcode single videos, double-click START_TRANSCODER.bat.\n"
+        "No Python, no Git, and no external FFmpeg installation is required.\n",
+        encoding="utf-8"
+    )
+
     print("\n" + "=" * 70)
-    print("✅ BUILD COMPLETE!")
-    print(f"  • Host Package   : {host_pkg}")
-    print(f"  • Client Package : {client_pkg}")
+    print("[OK] BUILD COMPLETE!")
+    print(f"  * Host Package   : {host_pkg}")
+    print(f"  * Client Package : {client_pkg}")
     print("=" * 70)
 
 
 if __name__ == "__main__":
     build()
+

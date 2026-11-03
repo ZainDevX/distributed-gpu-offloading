@@ -13,3 +13,4 @@ __all__ = [
     "get_all_filter_names",
     "ASPECT_RATIOS",
 ]
+

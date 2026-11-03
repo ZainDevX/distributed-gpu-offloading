@@ -5,7 +5,8 @@ Generates compliant FFmpeg drawtext filter syntax and handles timing/positioning
 
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -65,19 +66,13 @@ class TextOverlay:
         local_start_time: float,
         local_end_time: float,
         font_file: Optional[str] = None,
+        text_file: Optional[Path] = None,
     ) -> str:
         """
         Build FFmpeg drawtext expression calibrated to a local chunk window.
         local_start_time and local_end_time are in seconds relative to the chunk.
+        If text_file is provided, uses textfile= for 100% robust handling of all characters.
         """
-        # Escape special characters for FFmpeg filter syntax
-        clean_text = (
-            self.text.replace("\\", "\\\\")
-            .replace("'", "'\\\\''")
-            .replace(":", "\\:")
-            .replace("%", "\\%")
-        )
-
         # Coordinate positioning formulas
         if self.position == "center":
             pos_x = "(w-text_w)/2"
@@ -95,14 +90,29 @@ class TextOverlay:
         # Enable clause bounded to chunk
         enable_clause = f"between(t,{local_start_time:.3f},{local_end_time:.3f})"
 
-        # Base filter parameters
-        parts = [
-            f"text='{clean_text}'",
+        parts: List[str] = []
+
+        if text_file:
+            clean_txt_path = str(Path(text_file).resolve()).replace("\\", "/").replace(":", "\\:")
+            parts.append(f"textfile='{clean_txt_path}'")
+        else:
+            # Inline escaping: escape backslashes, colons, commas, semicolons, percent
+            clean_text = (
+                self.text.replace("\\", "\\\\")
+                .replace(":", "\\:")
+                .replace(",", "\\,")
+                .replace(";", "\\;")
+                .replace("%", "\\%")
+                .replace("'", "’")  # Replace ASCII apostrophe with typographic apostrophe to prevent FFmpeg filter delimiter confusion
+            )
+            parts.append(f"text='{clean_text}'")
+
+        parts.extend([
             f"fontsize={self.font_size}",
             f"fontcolor={self.font_color}",
             f"x={pos_x}",
             f"y={pos_y}",
-        ]
+        ])
 
         if font_file:
             clean_font = font_file.replace("\\", "/").replace(":", "\\:")
@@ -117,3 +127,4 @@ class TextOverlay:
 
         parts.append(f"enable='{enable_clause}'")
         return f"drawtext={':'.join(parts)}"
+

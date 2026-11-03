@@ -14,4 +14,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from client.gui_app import main
 
 if __name__ == "__main__":
-    main()
+    target_ip = None
+    if "--ip" in sys.argv:
+        try:
+            target_ip = sys.argv[sys.argv.index("--ip") + 1]
+        except IndexError:
+            pass
+    main(target_ip=target_ip)

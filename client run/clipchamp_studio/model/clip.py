@@ -242,3 +242,4 @@ class AudioClip:
             loop=bool(data.get("loop", False)),
             color=data.get("color", "#10b981"),
         )
+

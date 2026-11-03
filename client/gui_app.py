@@ -67,6 +67,7 @@ class DistributedOffloadGUI(ctk.CTk):
 
         # Build UI components
         self._build_ui()
+        self.protocol("WM_DELETE_WINDOW", self._on_window_close)
 
         # Log greeting
         self.log_to_terminal("System initialized. Welcome to CSC-334 Distributed GPU Offloading Client.")
@@ -893,13 +894,26 @@ class DistributedOffloadGUI(ctk.CTk):
         if os.path.exists(folder):
             os.startfile(folder)
 
+    def _on_window_close(self):
+        """Cancel running network tasks and close window cleanly."""
+        if self.is_processing:
+            self.network_client.request_cancel()
+        try:
+            self.network_client.close()
+        except Exception:
+            pass
+        self.destroy()
+
     def _launch_clipchamp_studio(self):
-        """Open the Windows 11 Clipchamp Video Editor Studio."""
-        from clipchamp_studio.ui.editor_window import ClipchampEditorWindow
+        """Open the Windows 11 Clipchamp Video Editor Studio in an isolated process."""
         target_ip = self.entry_ip.get().strip() or DEFAULT_CLIENT_TARGET
-        target_port = int(self.entry_port.get().strip() or DEFAULT_PORT)
-        editor = ClipchampEditorWindow(target_host=target_ip, target_port=target_port)
-        editor.mainloop()
+        target_port = self.entry_port.get().strip() or str(DEFAULT_PORT)
+        if getattr(sys, "frozen", False):
+            subprocess.Popen([sys.executable, "--studio", "--host", target_ip, "--port", target_port])
+        else:
+            base_dir = Path(__file__).resolve().parent.parent
+            script = base_dir / "start_editor.py"
+            subprocess.Popen([sys.executable, str(script), "--host", target_ip, "--port", target_port])
 
 
 def main(target_ip: Optional[str] = None):

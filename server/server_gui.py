@@ -53,6 +53,7 @@ class HostServerGUI(ctk.CTk):
 
         self._build_ui()
         self._start_telemetry_loop()
+        self.protocol("WM_DELETE_WINDOW", self._on_window_close)
 
         # Log welcome message
         self.log("Host Server Node Dashboard initialized.")
@@ -444,6 +445,12 @@ class HostServerGUI(ctk.CTk):
         )
         self.entry_port.configure(state="normal")
         self.log("Host Worker Server stopped.")
+
+    def _on_window_close(self):
+        """Cleanly unbind sockets and stop worker daemon before exit."""
+        if self.is_server_running:
+            self._stop_server()
+        self.destroy()
 
     # -------------------------------------------------------------
     # Periodic Telemetry & Queue Polling

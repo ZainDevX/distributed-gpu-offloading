@@ -83,3 +83,4 @@ def get_filter_expression(name: str) -> str:
 def get_all_filter_names() -> List[str]:
     """Return ordered list of available filter preset names."""
     return list(CLIPCHAMP_FILTERS.keys())
+

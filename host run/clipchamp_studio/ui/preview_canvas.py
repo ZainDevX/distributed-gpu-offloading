@@ -337,3 +337,4 @@ class VideoPreviewCanvas(ctk.CTkFrame):
             )
 
         draw.text((x, y), text, fill=txt.font_color)
+

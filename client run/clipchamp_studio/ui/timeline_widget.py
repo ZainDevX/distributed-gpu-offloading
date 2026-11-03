@@ -133,9 +133,9 @@ class InteractiveTimeline(ctk.CTkFrame):
         self.canvas.bind("<Button-1>", self._on_canvas_click)
         self.canvas.bind("<B1-Motion>", self._on_canvas_drag)
 
-        # Keyboard shortcuts
-        self.bind_all("<Key-s>", lambda e: self._on_click_split())
-        self.bind_all("<Delete>", lambda e: self._on_click_delete())
+        # Keyboard shortcuts (guarded against active text entry fields)
+        self.bind_all("<Key-s>", lambda e: self._on_key_split())
+        self.bind_all("<Delete>", lambda e: self._on_key_delete())
 
         self.redraw()
 
@@ -348,6 +348,26 @@ class InteractiveTimeline(ctk.CTkFrame):
         if self.on_playhead_move:
             self.on_playhead_move(t)
 
+    def _is_text_input_focused(self) -> bool:
+        """Check if user currently has an entry or text input focused."""
+        try:
+            focused = self.focus_get()
+            if focused is not None:
+                w_class = focused.winfo_class()
+                if w_class in ("Entry", "Text", "TEntry"):
+                    return True
+        except Exception:
+            pass
+        return False
+
+    def _on_key_split(self):
+        if not self._is_text_input_focused():
+            self._on_click_split()
+
+    def _on_key_delete(self):
+        if not self._is_text_input_focused():
+            self._on_click_delete()
+
     def _on_click_split(self):
         """Split selected clip at current playhead."""
         if self.selected_item_id and self.selected_item_type == "video":
@@ -364,3 +384,4 @@ class InteractiveTimeline(ctk.CTkFrame):
             elif self.project.remove_item(self.selected_item_id):
                 self.selected_item_id = None
                 self.redraw()
+

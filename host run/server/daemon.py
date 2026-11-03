@@ -513,6 +513,8 @@ class WorkerDaemon:
             with sock_lock:
                 try:
                     send_json(client_sock, MSG_CHUNK_PROGRESS, stats)
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+                    job.cancel_requested = True
                 except Exception:
                     pass
 
@@ -520,8 +522,27 @@ class WorkerDaemon:
             with sock_lock:
                 try:
                     send_json(client_sock, MSG_PROGRESS, {"stage": "Log", "log_line": msg})
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+                    job.cancel_requested = True
                 except Exception:
                     pass
+
+        def cancel_check() -> bool:
+            if job.cancel_requested:
+                return True
+            # Non-blocking poll for incoming cancel packet or socket closure
+            try:
+                import select
+                r, _, _ = select.select([client_sock], [], [], 0)
+                if r:
+                    m_type, _, _ = recv_packet(client_sock)
+                    if m_type == MSG_CANCEL:
+                        job.cancel_requested = True
+                        return True
+            except Exception:
+                job.cancel_requested = True
+                return True
+            return False
 
         try:
             res = self.chunked_engine.execute_project(
@@ -531,7 +552,7 @@ class WorkerDaemon:
                 job_id=job.job_id,
                 progress_callback=on_progress,
                 log_callback=on_log,
-                cancel_check=lambda: job.cancel_requested,
+                cancel_check=cancel_check,
             )
             out_p = Path(res["output_path"])
             job.output_path = out_p

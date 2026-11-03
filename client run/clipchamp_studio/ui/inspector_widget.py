@@ -364,3 +364,4 @@ class InspectorWidget(ctk.CTkFrame):
         )
         s_vol.set(aud.volume)
         s_vol.pack(fill="x", pady=(0, 6))
+

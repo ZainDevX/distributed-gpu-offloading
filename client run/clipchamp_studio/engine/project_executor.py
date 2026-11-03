@@ -86,6 +86,8 @@ class LocalProjectExecutor:
                             break
 
                 proc.wait()
+                if proc.stdout:
+                    proc.stdout.close()
                 if proc.returncode != 0:
                     raise RuntimeError(f"FFmpeg CPU render failed on chunk {idx + 1}")
 

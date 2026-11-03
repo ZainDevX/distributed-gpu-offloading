@@ -54,6 +54,17 @@ class ExportDialog(ctk.CTkToplevel):
         self.chunk_cards: List[Dict[str, Any]] = []
 
         self._build_ui()
+        self.protocol("WM_DELETE_WINDOW", self._on_window_close)
+
+    def _on_window_close(self):
+        """Handle dialog close cleanly by cancelling running tasks and closing socket."""
+        if self.is_running:
+            self.network_client.request_cancel()
+        try:
+            self.network_client.close()
+        except Exception:
+            pass
+        self.destroy()
 
     def _build_ui(self):
         # 1. Top Banner
@@ -406,7 +417,7 @@ class ExportDialog(ctk.CTkToplevel):
     def _worker_gpu_export(self):
         try:
             self.log("Commencing Host GPU offload pipeline...")
-            self.lbl_stage.configure(text="Connecting to Host...")
+            self.after(0, lambda: self.lbl_stage.configure(text="Connecting to Host..."))
 
             # 1. Connect and Handshake
             self.network_client.connect()

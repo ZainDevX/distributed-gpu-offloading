@@ -132,11 +132,32 @@ class ChunkedProjectEngine:
                 proc = subprocess.Popen(
                     cmd,
                     stdout=subprocess.PIPE,
-                    stderr=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
                     text=True,
                     bufsize=1,
                     errors="replace",
                 )
+
+                stderr_lines: List[str] = []
+                def _read_stderr():
+                    try:
+                        for err_line in iter(proc.stderr.readline, ""):
+                            if err_line:
+                                stderr_lines.append(err_line.strip())
+                                if len(stderr_lines) > 25:
+                                    stderr_lines.pop(0)
+                    except Exception:
+                        pass
+                    finally:
+                        if proc.stderr:
+                            try:
+                                proc.stderr.close()
+                            except Exception:
+                                pass
+
+                import threading
+                err_thread = threading.Thread(target=_read_stderr, daemon=True)
+                err_thread.start()
 
                 chunk_fps = 0.0
                 chunk_speed = "1.0x"
@@ -197,9 +218,11 @@ class ChunkedProjectEngine:
                 proc.wait()
                 if proc.stdout:
                     proc.stdout.close()
+                err_thread.join(timeout=0.5)
 
                 if proc.returncode != 0:
-                    log(f"[CHUNK-ENGINE] [ERROR] Chunk {idx + 1} failed with code {proc.returncode}")
+                    err_details = " | ".join(stderr_lines[-5:]) if stderr_lines else f"code {proc.returncode}"
+                    log(f"[CHUNK-ENGINE] [ERROR] Chunk {idx + 1} failed: {err_details}")
                     # If NVENC failed, try software fallback for this chunk
                     if "nvenc" in actual_codec and self.allow_cpu_fallback:
                         log("[CHUNK-ENGINE] Retrying chunk with CPU fallback...")
@@ -214,7 +237,7 @@ class ChunkedProjectEngine:
                         )
                         subprocess.run(cmd_fallback, check=True)
                     else:
-                        raise RuntimeError(f"FFmpeg failed while rendering chunk {idx + 1}")
+                        raise RuntimeError(f"FFmpeg failed while rendering chunk {idx + 1}: {err_details}")
 
                 chunk_elapsed = time.time() - chunk_start_t
                 log(f"[CHUNK-ENGINE] Chunk {idx + 1}/{total_chunks} completed in {chunk_elapsed:.2f}s")
